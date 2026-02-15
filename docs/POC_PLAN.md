@@ -4,8 +4,8 @@
 
 ## Definition of Done
 1. В репозитории есть команды:
-   - `npm run poc:dns` -> сохраняет `out/dns_poc.json`
-   - `npm run poc:citilink` -> сохраняет `out/citilink_poc.json`
+   - `bun run poc:dns` -> сохраняет `out/dns_poc.json`
+   - `bun run poc:citilink` -> сохраняет `out/citilink_poc.json`
 2. JSON содержит:
    - `source`, `url`, `fetchedAt`
    - `raw` (минимум: сырой JSON-LD/ответ API/фрагменты) или `debug` (статус, cookies)
@@ -14,8 +14,8 @@
 
 ## Этап 0. Подготовка окружения
 1. Проверить зависимости и браузеры Playwright:
-   - `npm install`
-   - `npx playwright install chromium`
+   - `bun install`
+   - `bun run setup:playwright`
 2. Создать `out/` и исключить его из VCS (если появится git):
    - `out/` хранит результаты PoC и отладочные артефакты.
 
@@ -61,4 +61,3 @@ Citilink может отдавать “JS-челлендж” даже на `ro
 1. Обернуть PoC в Next.js API route (`/api/poc/dns`, `/api/poc/citilink`).
 2. Добавить простейший rate limit и логирование.
 3. Сохранение результатов в Postgres (таблица `components`) заменить файловый `out/`.
-

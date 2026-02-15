@@ -83,8 +83,8 @@
 
 Команды:
 ```bash
-npm run poc:dns
-npm run poc:citilink
+bun run poc:dns
+bun run poc:citilink
 ```
 
 ## 8. Решение для парсинга DNS-Shop.ru и Citilink.ru в Next.js-приложении
