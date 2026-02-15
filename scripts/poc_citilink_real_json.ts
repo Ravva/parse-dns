@@ -170,17 +170,17 @@ async function main() {
     throw new Error("Citilink: не нашел ссылку /product/ на странице поиска (сохранил out/citilink_debug_search.html)");
   }
 
-  // Для более полных характеристик стараемся открыть именно вкладку "характеристики".
+  // Для более полных характеристик стараемся открыть именно вкладку "properties".
   const characteristicsHref = (() => {
     try {
       const u = new URL(productHref);
       const parts = u.pathname.split("/").filter(Boolean); // ["product", slug, tab?]
       if (parts.length >= 3 && parts[0] === "product") {
-        parts[2] = "harakteristiki";
+        parts[2] = "properties";
         u.pathname = `/${parts.join("/")}/`;
         return u.toString();
       }
-      u.pathname = u.pathname.replace(/\/+$/, "") + "/harakteristiki/";
+      u.pathname = u.pathname.replace(/\/+$/, "") + "/properties/";
       return u.toString();
     } catch {
       return productHref;
