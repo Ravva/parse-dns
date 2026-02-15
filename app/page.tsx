@@ -53,64 +53,67 @@ export default async function DashboardPage() {
 
   return (
     <AppShell>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Дашборд</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <div className="mb-8 fade-in slide-in-from-bottom-4 duration-700 animate-in">
+        <h1 className="text-gradient text-3xl font-bold tracking-tight">Дашборд</h1>
+        <p className="mt-1 text-muted-foreground">
           Обзор распарсированных комплектующих ПК
         </p>
       </div>
 
       {/* Stats */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 fade-in slide-in-from-bottom-5 duration-1000 animate-in fill-mode-backwards">
+        <Card className="glass-card border-l-4 border-l-primary/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Всего товаров
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{totalProducts ?? 0}</div>
+            <div className="text-4xl font-bold text-foreground">{totalProducts ?? 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-card border-l-4 border-l-accent/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">DNS-Shop</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{sourceCounts['dns-shop'] ?? 0}</div>
+            <div className="text-4xl font-bold text-foreground">{sourceCounts['dns-shop'] ?? 0}</div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="glass-card border-l-4 border-l-secondary/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Citilink</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{sourceCounts['citilink'] ?? 0}</div>
+            <div className="text-4xl font-bold text-foreground">{sourceCounts['citilink'] ?? 0}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Last parse run */}
       {lastRun && (
-        <div className="mb-8">
-          <p className="text-xs text-muted-foreground">
-            Последний парсинг: {new Date(lastRun.started_at).toLocaleString('ru-RU')}{' '}
-            <Badge variant={lastRun.status === 'completed' ? 'default' : 'destructive'}>
+        <div className="mb-8 fade-in slide-in-from-bottom-6 duration-1000 animate-in fill-mode-backwards delay-100">
+          <div className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <span>Последний парсинг: {new Date(lastRun.started_at).toLocaleString('ru-RU')}</span>
+            <span className="h-1 w-1 rounded-full bg-border" />
+            <Badge variant={lastRun.status === 'completed' ? 'default' : 'destructive'} className="shadow-none">
               {lastRun.status}
             </Badge>
-          </p>
+          </div>
         </div>
       )}
 
       {/* Category grid */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 fade-in slide-in-from-bottom-8 duration-1000 animate-in fill-mode-backwards delay-200">
         {(categories as Category[])?.map((cat) => (
-          <Link key={cat.id} href={`/category/${cat.id}`}>
-            <Card className="transition-colors hover:border-primary/40 hover:bg-accent/30">
-              <CardContent className="flex items-center gap-4 pt-6">
-                <span className="text-3xl">{CATEGORY_ICONS[cat.id] ?? '📦'}</span>
+          <Link key={cat.id} href={`/category/${cat.id}`} className="group">
+            <Card className="glass-card h-full transition-all duration-500 group-hover:-translate-y-1 group-hover:shadow-primary/10 group-hover:border-primary/20">
+              <CardContent className="flex items-center gap-5 pt-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-background to-muted shadow-inner ring-1 ring-border/50 group-hover:from-primary/10 group-hover:to-accent/10 transition-colors duration-500">
+                  <span className="text-2xl group-hover:scale-110 transition-transform duration-300">{CATEGORY_ICONS[cat.id] ?? '📦'}</span>
+                </div>
                 <div>
-                  <div className="font-medium">{cat.name}</div>
+                  <div className="font-semibold text-lg group-hover:text-primary transition-colors">{cat.name}</div>
                   <div className="text-sm text-muted-foreground">
                     {categoryCounts[cat.id] ?? 0} товаров
                   </div>

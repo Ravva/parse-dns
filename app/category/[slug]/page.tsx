@@ -28,8 +28,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{(category as Category).name}</h1>
+      <div className="mb-6 fade-in slide-in-from-bottom-4 duration-700 animate-in">
+        <h1 className="text-gradient text-3xl font-bold tracking-tight">
+          {(category as Category).name}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {(products as Product[])?.length ?? 0} товаров
         </p>

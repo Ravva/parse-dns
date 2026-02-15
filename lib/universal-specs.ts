@@ -47,7 +47,7 @@ export const UNIVERSAL_SPECS_CONFIG: Record<
     keys: ['Socket', 'Chipset', 'Memory Type', 'Form Factor'],
     citilinkMap: {
       'Гнездо процессора': 'Socket',
-      'Чипсет': 'Chipset',
+      Чипсет: 'Chipset',
       'Тип поддерживаемой памяти': 'Memory Type',
       'Форм-фактор': 'Form Factor',
     },
@@ -63,8 +63,8 @@ export const UNIVERSAL_SPECS_CONFIG: Record<
     citilinkMap: {
       'Тип памяти': 'Type',
       'Объем модулей': 'Capacity', // Sometimes "Объем" or "Объем одного модуля"
-      'Частота': 'Frequency',
-      'Латентность': 'Timings', // Citilink might not have Timings easily mapped, check later
+      Частота: 'Frequency',
+      Латентность: 'Timings', // Citilink might not have Timings easily mapped, check later
     },
     dnsRegex: {
       Type: /(DDR\d+)/i,
@@ -78,7 +78,7 @@ export const UNIVERSAL_SPECS_CONFIG: Record<
     citilinkMap: {
       'Объем накопителя': 'Capacity',
       'Форм-фактор': 'Form Factor',
-      'Интерфейс': 'Interface',
+      Интерфейс: 'Interface',
       'Максимальная скорость чтения': 'Read Speed',
     },
     dnsRegex: {
@@ -104,7 +104,7 @@ export const UNIVERSAL_SPECS_CONFIG: Record<
   psu: {
     keys: ['Power', 'Certificate', 'Modular'],
     citilinkMap: {
-      'Мощность': 'Power',
+      Мощность: 'Power',
       'Сертификат 80 PLUS': 'Certificate',
       'Отстегивающиеся кабели': 'Modular',
     },
@@ -117,8 +117,8 @@ export const UNIVERSAL_SPECS_CONFIG: Record<
   case: {
     keys: ['Form Factor', 'Color', 'GPU Length'],
     citilinkMap: {
-      'Типоразмер': 'Form Factor',
-      'Цвет': 'Color',
+      Типоразмер: 'Form Factor',
+      Цвет: 'Color',
       'Максимальная длина видеокарты': 'GPU Length',
     },
     dnsRegex: {

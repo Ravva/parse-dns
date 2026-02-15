@@ -120,7 +120,38 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground relative overflow-x-hidden min-h-screen font-sans antialiased;
+    background-image: radial-gradient(at 0% 0%, rgba(var(--primary) / 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(var(--accent) / 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(var(--secondary) / 0.15) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(var(--primary) / 0.15) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-background/60 backdrop-blur-xl border border-border/50;
+  }
+
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-lg border-border/40 shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-card/70;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-secondary;
+  }
+}
+
+/* Aurora Animation */
+@keyframes aurora {
+  0% {
+    background-position: 50% 50%, 50% 50%;
+  }
+
+  100% {
+    background-position: 350% 50%, 350% 50%;
   }
 }

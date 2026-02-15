@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { Product } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 function formatPrice(price: number | null): string {
@@ -25,6 +26,7 @@ type SortKey = 'name' | 'price' | 'brand';
 type SortDir = 'asc' | 'desc';
 
 export function ProductsTable({ products }: { products: Product[] }) {
+  const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>('price');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -58,96 +60,104 @@ export function ProductsTable({ products }: { products: Product[] }) {
 
   if (products.length === 0) {
     return (
-      <div className="py-16 text-center">
+      <div className="glass-card py-16 text-center rounded-xl">
         <p className="text-lg text-muted-foreground">Товары ещё не загружены</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Запустите парсинг командой{' '}
-          <code className="bg-muted px-1.5 py-0.5 text-xs">bun run parse</code>
-        </p>
+        <div className="mt-4">
+          <span className="text-4xl">🤷‍♂️</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="border border-border rounded-md overflow-hidden">
+    <div className="fade-in slide-in-from-bottom-8 duration-700 animate-in fill-mode-backwards delay-300">
+      <div className="glass-card rounded-xl overflow-hidden border-border/50">
         <Table className="whitespace-nowrap">
-          <TableHeader>
-            <TableRow>
+          <TableHeader className="bg-muted/30">
+            <TableRow className="hover:bg-transparent border-border/50">
               <TableHead
-                className="w-[300px] cursor-pointer select-none"
+                className="w-[300px] cursor-pointer select-none font-bold text-foreground"
                 onClick={() => handleSort('name')}
               >
                 Название{sortIndicator('name')}
               </TableHead>
               <TableHead
-                className="cursor-pointer select-none"
+                className="cursor-pointer select-none font-bold text-foreground"
                 onClick={() => handleSort('brand')}
               >
                 Бренд{sortIndicator('brand')}
               </TableHead>
               <TableHead
-                className="cursor-pointer select-none text-right"
+                className="cursor-pointer select-none text-right font-bold text-foreground"
                 onClick={() => handleSort('price')}
               >
                 Цена{sortIndicator('price')}
               </TableHead>
-              <TableHead>Описание</TableHead>
-              <TableHead className="w-[80px]">Источник</TableHead>
-              <TableHead className="text-center w-[80px]">Наличие</TableHead>
+              <TableHead className="font-bold text-foreground">Описание</TableHead>
+              <TableHead className="w-[80px] font-bold text-foreground">Источник</TableHead>
+              <TableHead className="text-center w-[80px] font-bold text-foreground">
+                Наличие
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="py-2 max-w-[300px]">
-                  <a
-                    href={product.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium hover:text-primary transition-colors whitespace-normal line-clamp-2 block"
-                    title={product.name}
-                  >
+              <TableRow
+                key={product.id}
+                className="cursor-pointer transition-colors hover:bg-muted/40 border-border/40"
+                onClick={() => router.push(`/product/${product.id}`)}
+              >
+                <TableCell className="py-3 max-w-[300px]">
+                  <span className="text-sm font-medium whitespace-normal line-clamp-2 block leading-relaxed">
                     {product.name}
-                  </a>
+                  </span>
                 </TableCell>
-                <TableCell className="py-2 text-sm font-medium">
+                <TableCell className="py-3 text-sm font-medium text-muted-foreground">
                   {product.brand ?? '—'}
                 </TableCell>
-                <TableCell className="py-2 text-right tabular-nums">
-                  <div className="text-sm font-bold">{formatPrice(product.price_current)}</div>
+                <TableCell className="py-3 text-right tabular-nums">
+                  <div className="text-sm font-bold text-primary">
+                    {formatPrice(product.price_current)}
+                  </div>
                   {product.price_old != null && product.price_old > 0 && (
                     <div className="text-[10px] text-muted-foreground line-through">
                       {formatPrice(product.price_old)}
                     </div>
                   )}
                 </TableCell>
-                <TableCell className="py-2 max-w-[350px]">
-                  <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2">
+                <TableCell className="py-3 max-w-[350px]">
+                  <p className="text-xs text-muted-foreground whitespace-normal line-clamp-2 leading-relaxed">
                     {product.key_specs && typeof product.key_specs === 'object'
                       ? Object.values(product.key_specs).join(' · ')
                       : '—'}
                   </p>
                 </TableCell>
-                <TableCell className="py-2">
+                <TableCell className="py-3">
                   <Badge
-                    variant={product.source === 'dns-shop' ? 'default' : 'secondary'}
-                    className={`text-[10px] px-1.5 py-0 ${product.source === 'dns-shop'
-                        ? 'bg-orange-500 hover:bg-orange-600 text-white border-none'
-                        : 'bg-blue-500 hover:bg-blue-600 text-white border-none'
-                      }`}
+                    variant="outline"
+                    className={`text-[10px] px-2 py-0.5 border font-normal ${
+                      product.source === 'dns-shop'
+                        ? 'border-orange-500/50 text-orange-500 bg-orange-500/10'
+                        : 'border-blue-500/50 text-blue-500 bg-blue-500/10'
+                    }`}
                   >
                     {product.source === 'dns-shop' ? 'DNS' : 'Citilink'}
                   </Badge>
                 </TableCell>
-                <TableCell className="py-2 text-center">
+                <TableCell className="py-3 text-center">
                   {product.in_stock ? (
                     <div className="flex justify-center">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" title="В наличии" />
+                      <div
+                        className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                        title="В наличии"
+                      />
                     </div>
                   ) : (
                     <div className="flex justify-center">
-                      <span className="h-2 w-2 rounded-full bg-stone-300 dark:bg-stone-700" title="Нет в наличии" />
+                      <div
+                        className="h-2.5 w-2.5 rounded-full bg-stone-300 dark:bg-stone-700"
+                        title="Нет в наличии"
+                      />
                     </div>
                   )}
                 </TableCell>
@@ -157,7 +167,9 @@ export function ProductsTable({ products }: { products: Product[] }) {
         </Table>
       </div>
 
-      <p className="mt-3 text-xs text-muted-foreground">Всего товаров: {sorted.length}</p>
+      <div className="mt-4 flex justify-between items-center px-2">
+        <p className="text-xs text-muted-foreground font-medium">Всего товаров: {sorted.length}</p>
+      </div>
     </div>
   );
 }

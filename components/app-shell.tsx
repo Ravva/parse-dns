@@ -11,8 +11,10 @@ export default async function AppShell({ children }: { children: React.ReactNode
   return (
     <div className="flex min-h-screen">
       <Sidebar categories={(categories as Category[]) ?? []} />
-      <main className="flex-1 pl-64">
-        <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+      <main className="flex-1 pl-64 transition-all duration-300">
+        <div className="mx-auto max-w-7xl px-8 py-10 animate-in fade-in zoom-in-95 duration-500">
+          {children}
+        </div>
       </main>
     </div>
   );
