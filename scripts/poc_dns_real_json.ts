@@ -4,6 +4,27 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { chromium, type APIResponse, type BrowserContext } from "playwright";
 
+type SpecItem = { group: string | null; name: string; value: string };
+
+type UnifiedOut = {
+  source: "dns-shop.ru";
+  fetchedAt: string;
+  url: string;
+  debug: Record<string, unknown>;
+  product: {
+    name: string | null;
+    description: string | null;
+    brand: string | null;
+    sku: string | null;
+    price: { current: number | null; old: number | null; currency: string | null };
+    availability: string | null;
+    images: string[];
+    rating: { value: number | null; count: number | null };
+  };
+  specs: SpecItem[];
+  raw: Record<string, unknown>;
+};
+
 type DnsNormalized = {
   name: string | null;
   price: {
@@ -53,15 +74,22 @@ async function pickLiveDnsProductUrl(contains: string): Promise<string> {
 
   const chunk = String(resp.data);
   const locRegex = /<loc>(https:\/\/www\.dns-shop\.ru\/product\/[^<]+)<\/loc>/gi;
+  const candidates: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = locRegex.exec(chunk))) {
     const url = match[1];
-    if (url.toLowerCase().includes(contains.toLowerCase())) return url;
+    if (url.toLowerCase().includes(contains.toLowerCase())) candidates.push(url);
+    if (candidates.length >= 50) break;
   }
 
-  throw new Error(
-    `DNS ${path.basename(firstProductsSitemap)}: не нашел product URL по подстроке ${JSON.stringify(contains)} в первых 5MB`,
-  );
+  if (candidates.length === 0) {
+    throw new Error(
+      `DNS ${path.basename(firstProductsSitemap)}: не нашел product URL по подстроке ${JSON.stringify(contains)} в первых 5MB`,
+    );
+  }
+
+  // Рандомный товар (в рамках первых N найденных из sitemap-chunk).
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 async function waitForDnsCookies(context: BrowserContext) {
@@ -150,16 +178,21 @@ function extractMicrodataPathFromHtml(html: string): string | null {
   return m?.[1] ?? null;
 }
 
+function extractCharacteristicsPathFromHtml(html: string): string | null {
+  const m = html.match(/id="product-card-characteristics"[^>]+data-url="([^"]+)"/);
+  return m?.[1] ?? null;
+}
+
 function parseDnsMicrodataResponse(microText: string): {
   productJsonLd: unknown | null;
-  normalizedPatch: Partial<DnsNormalized>;
+  productPatch: Partial<UnifiedOut["product"]>;
 } {
   // DNS microdata endpoint на практике возвращает JSON:
   // {"result":true,"data":{ "@type":"Product", ... }}
   // Но на блокировках может вернуться HTML с JS-челленджем, поэтому есть fallback.
 
   let productJsonLd: unknown | null = null;
-  const normalizedPatch: Partial<DnsNormalized> = {};
+  const productPatch: Partial<UnifiedOut["product"]> = {};
 
   try {
     const parsed = JSON.parse(microText);
@@ -194,27 +227,147 @@ function parseDnsMicrodataResponse(microText: string): {
   // Патчим нормализованные поля тем, что смогли вытащить из JSON-LD.
   if (productJsonLd && typeof productJsonLd === "object") {
     const p = productJsonLd as any;
-    if (typeof p.name === "string") normalizedPatch.name = p.name;
+    if (typeof p.name === "string") productPatch.name = p.name;
+    if (typeof p.description === "string") productPatch.description = p.description;
     if (p.brand && typeof p.brand === "object" && typeof p.brand.name === "string") {
-      normalizedPatch.brand = p.brand.name;
+      productPatch.brand = p.brand.name;
     }
+    if (typeof p.sku === "string" || typeof p.sku === "number") productPatch.sku = String(p.sku);
     if (p.offers) {
       const offers = Array.isArray(p.offers) ? p.offers[0] : p.offers;
       if (offers && typeof offers === "object") {
         const price = (offers as any).price;
         const priceNum = typeof price === "string" ? Number.parseInt(price.replace(/\D/g, ""), 10) : price;
         if (Number.isFinite(priceNum)) {
-          normalizedPatch.price = { current: priceNum, old: null };
+          productPatch.price = {
+            current: priceNum,
+            old: null,
+            currency: typeof (offers as any).priceCurrency === "string" ? (offers as any).priceCurrency : "RUB",
+          };
         }
+        if (typeof (offers as any).availability === "string") productPatch.availability = (offers as any).availability;
       }
     }
-    if (typeof p.image === "string") normalizedPatch.images = [p.image];
+    if (p.aggregateRating && typeof p.aggregateRating === "object") {
+      const rv = Number((p.aggregateRating as any).ratingValue);
+      const rc = Number((p.aggregateRating as any).reviewCount);
+      productPatch.rating = { value: Number.isFinite(rv) ? rv : null, count: Number.isFinite(rc) ? rc : null };
+    }
+    if (typeof p.image === "string") productPatch.images = [p.image];
     if (Array.isArray(p.image) && p.image.every((x: any) => typeof x === "string")) {
-      normalizedPatch.images = p.image;
+      productPatch.images = p.image;
     }
   }
 
-  return { productJsonLd, normalizedPatch };
+  return { productJsonLd, productPatch };
+}
+
+function parseDnsCharacteristicsHtml(characteristicsHtml: string): SpecItem[] {
+  const $ = cheerio.load(characteristicsHtml);
+
+  const specs: SpecItem[] = [];
+
+  // Современная разметка DNS: группы + li.
+  $(".product-characteristics__group").each((_, groupEl) => {
+    const group = $(groupEl).find(".product-characteristics__group-title").first().text().replace(/\s+/g, " ").trim();
+    $(groupEl)
+      .find(".product-characteristics__spec")
+      .each((_, specEl) => {
+        const name = $(specEl)
+          .find(".product-characteristics__spec-title-content")
+          .first()
+          .text()
+          .replace(/\s+/g, " ")
+          .trim();
+        const value = $(specEl)
+          .find(".product-characteristics__spec-value")
+          .first()
+          .text()
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!name || !value) return;
+        specs.push({ group: group || null, name, value });
+      });
+  });
+
+  // Таблица (самый частый вариант)
+  $("tr").each((_, tr) => {
+    const cells = $(tr).find("th, td");
+    if (cells.length < 2) return;
+    const name = $(cells[0]).text().replace(/\s+/g, " ").trim();
+    const value = $(cells[1]).text().replace(/\s+/g, " ").trim();
+    if (!name || !value) return;
+    specs.push({ group: null, name, value });
+  });
+
+  // dl/dt/dd (fallback)
+  $("dt").each((_, dt) => {
+    const name = $(dt).text().replace(/\s+/g, " ").trim();
+    const dd = $(dt).next("dd");
+    const value = dd.text().replace(/\s+/g, " ").trim();
+    if (!name || !value) return;
+    specs.push({ group: null, name, value });
+  });
+
+  // Dedup
+  const seen = new Set<string>();
+  return specs.filter((s) => {
+    const k = `${s.group ?? ""}||${s.name}||${s.value}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function decodeDnsEscapedPath(p: string): string {
+  // В HTML DNS часто экранирует "/" как "\/"
+  return p.replace(/\\\//g, "/");
+}
+
+function parseDnsCharacteristicsActualJson(data: unknown): SpecItem[] {
+  // Формат может меняться. Делаем максимально терпимый разбор:
+  // ищем группы/спеки по типичным ключам.
+  const specs: SpecItem[] = [];
+
+  function walk(node: any, group: string | null) {
+    if (!node || typeof node !== "object") return;
+
+    // Типичный вариант: { title/name, items/specs/list: [...] }
+    const nextGroup =
+      typeof node.title === "string"
+        ? node.title
+        : typeof node.name === "string"
+          ? node.name
+          : group;
+
+    // Типичный вариант спеки: { title/name, value }
+    if (typeof node.value === "string") {
+      const name = typeof node.title === "string" ? node.title : typeof node.name === "string" ? node.name : null;
+      if (name) {
+        const value = node.value.trim();
+        if (value) specs.push({ group: nextGroup ?? null, name: name.trim(), value });
+      }
+    }
+
+    for (const k of Object.keys(node)) {
+      const v = (node as any)[k];
+      if (Array.isArray(v)) {
+        for (const item of v) walk(item, nextGroup ?? null);
+      } else if (v && typeof v === "object") {
+        walk(v, nextGroup ?? null);
+      }
+    }
+  }
+
+  walk(data as any, null);
+
+  const seen = new Set<string>();
+  return specs.filter((s) => {
+    const key = `${s.group ?? ""}||${s.name}||${s.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function main() {
@@ -285,7 +438,18 @@ async function main() {
   const htmlStatus = htmlResp.status();
   const html = stripAmbiguousUnicode(await htmlResp.text());
 
-  let normalized = parseDnsHtml(urlWithCity, html);
+  const normalized = parseDnsHtml(urlWithCity, html);
+
+  let product: UnifiedOut["product"] = {
+    name: normalized.name,
+    description: null,
+    brand: normalized.brand,
+    sku: null,
+    price: { current: normalized.price.current, old: normalized.price.old, currency: null },
+    availability: normalized.availabilityText,
+    images: normalized.images,
+    rating: { value: null, count: null },
+  };
 
   // Добираем данные через microdata endpoint, который DNS сам использует.
   let microdata: { url: string; status: number; productJsonLd: unknown | null } | null = null;
@@ -295,24 +459,57 @@ async function main() {
     const microResp = await context.request.get(microUrl, { timeout: 60000 });
     const microText = stripAmbiguousUnicode(await microResp.text());
     writeFileSync("out/dns_microdata.txt", microText, "utf8");
-    const { productJsonLd, normalizedPatch } = parseDnsMicrodataResponse(microText);
+    const { productJsonLd, productPatch } = parseDnsMicrodataResponse(microText);
     microdata = { url: microUrl, status: microResp.status(), productJsonLd };
 
-    // Мерджим patch поверх html-парсинга.
-    normalized = {
-      name: normalizedPatch.name ?? normalized.name,
-      brand: normalizedPatch.brand ?? normalized.brand,
-      availabilityText: normalized.availabilityText,
-      specifications: normalized.specifications,
-      images: normalizedPatch.images ?? normalized.images,
-      price: normalizedPatch.price ?? normalized.price,
+    product = {
+      ...product,
+      ...productPatch,
+      price: productPatch.price ?? product.price,
+      images: productPatch.images ?? product.images,
+      rating: productPatch.rating ?? product.rating,
     };
+  }
+
+  // Характеристики: грузятся отдельным URL.
+  let characteristics: { url: string; status: number } | null = null;
+  let specs: SpecItem[] = [];
+  const charPath = extractCharacteristicsPathFromHtml(html);
+  if (charPath) {
+    const charUrl = new URL(charPath, "https://www.dns-shop.ru").toString();
+    const charResp = await context.request.get(charUrl, { timeout: 60000 });
+    const charHtml = stripAmbiguousUnicode(await charResp.text());
+    writeFileSync("out/dns_characteristics.html", charHtml, "utf8");
+    characteristics = { url: charUrl, status: charResp.status() };
+    specs = parseDnsCharacteristicsHtml(charHtml);
+
+    // Пытаемся получить "актуальные" характеристики из внутреннего JSON-эндпоинта,
+    // который используется на странице характеристик.
+    const m = charHtml.match(/\\\/catalog\\\/product\\\/get-product-characteristics-actual\\\/\?id=[0-9a-f-]+/i);
+    if (m?.[0]) {
+      const actualPath = decodeDnsEscapedPath(m[0]);
+      const actualUrl = new URL(actualPath, "https://www.dns-shop.ru").toString();
+      const actualResp = await context.request.get(actualUrl, { timeout: 60000 });
+      const actualText = stripAmbiguousUnicode(await actualResp.text());
+      writeFileSync("out/dns_characteristics_actual.json", actualText, "utf8");
+      try {
+        const parsed = JSON.parse(actualText);
+        // endpoint чаще возвращает { result: true, html: "<div ...>...</div>" }
+        const html = typeof parsed?.html === "string" ? parsed.html : null;
+        const fromHtml = html ? parseDnsCharacteristicsHtml(html) : [];
+        const fromJson = parseDnsCharacteristicsActualJson(parsed);
+        const best = fromHtml.length >= fromJson.length ? fromHtml : fromJson;
+        if (best.length > specs.length) specs = best;
+      } catch {
+        // ignore
+      }
+    }
   }
 
   const cookies = await context.cookies();
   const cookieNames = cookies.map((c) => c.name).sort();
 
-  const out = {
+  const out: UnifiedOut = {
     source: "dns-shop.ru",
     fetchedAt: new Date().toISOString(),
     url: urlWithCity,
@@ -321,13 +518,15 @@ async function main() {
       productNavStatus: productResp?.status() ?? null,
       htmlStatus,
       cookieNames,
+      characteristics,
     },
+    product,
+    specs,
     raw: {
       pwa: pwaJson,
       microdata,
       htmlSnippet: html.slice(0, 50_000),
     },
-    normalized,
   };
 
   writeFileSync("out/dns_poc.json", JSON.stringify(out, null, 2), "utf8");
@@ -337,7 +536,9 @@ async function main() {
   await context.close();
   await browser.close();
 
-  console.log(`Wrote out/dns_poc.json (name=${normalized.name ?? "null"}, price=${normalized.price.current ?? "null"})`);
+  console.log(
+    `Wrote out/dns_poc.json (name=${out.product.name ?? "null"}, price=${out.product.price.current ?? "null"}, specs=${out.specs.length})`,
+  );
 }
 
 main().catch((e) => {
