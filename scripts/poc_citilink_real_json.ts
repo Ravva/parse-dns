@@ -70,24 +70,39 @@ function extractNextDataJson(html: string): any | null {
 function extractNameValueSpecsFromUnknownJson(data: unknown): SpecItem[] {
   const out: SpecItem[] = [];
 
-  function walk(node: any) {
+  function walk(node: any, currentGroup: string | null = null) {
     if (!node || typeof node !== "object") return;
+
+    // Citilink grouped structure: { name: "...", items: [ { name, value }, ... ] }
+    if (typeof node.name === "string" && Array.isArray(node.items)) {
+      for (const item of node.items) {
+        walk(item, node.name.trim());
+      }
+      return;
+    }
 
     // Canonical Citilink-ish shape: { name: string, value: string, measure?: string }
     if (typeof node.name === "string" && typeof node.value === "string") {
       const name = node.name.trim();
       const value = node.value.trim();
-      if (name && value) out.push({ group: null, name, value });
+      const measure = typeof node.measure === "string" ? node.measure.trim() : "";
+      if (name && value) {
+        out.push({
+          group: currentGroup,
+          name,
+          value: measure ? `${value} ${measure}` : value,
+        });
+      }
     }
 
     if (Array.isArray(node)) {
-      for (const x of node) walk(x);
+      for (const x of node) walk(x, currentGroup);
       return;
     }
 
     for (const k of Object.keys(node)) {
       const v = node[k];
-      if (v && typeof v === "object") walk(v);
+      if (v && typeof v === "object") walk(v, currentGroup);
     }
   }
 
@@ -101,6 +116,7 @@ function extractNameValueSpecsFromUnknownJson(data: unknown): SpecItem[] {
     return true;
   });
 }
+
 
 async function main() {
   ensureOutDir();
@@ -128,41 +144,89 @@ async function main() {
 
   // Пытаемся перехватить "полные" характеристики, если они догружаются с бэка.
   let capturedApiSpecs: SpecItem[] = [];
+  const capturedRpc: Array<{ url: string; method: string; contentType: string | null; status: number; body?: string }> =
+    [];
+  const capturedRpcUrls = new Set<string>();
   page.on("response", async (r) => {
     const u = r.url();
     if (!u.includes("rpc.citilink.ru/catalog-site")) return;
+    if (!capturedRpcUrls.has(u)) capturedRpcUrls.add(u);
+
     try {
       const json = await r.json();
       const specs = extractNameValueSpecsFromUnknownJson(json);
       if (specs.length > capturedApiSpecs.length) capturedApiSpecs = specs;
+
+      // Сохраняем один "сэмпл" ответа для реверса, чтобы вытащить полные группы/пары.
+      if (capturedRpc.length < 3) {
+        capturedRpc.push({
+          url: u,
+          method: r.request().method(),
+          contentType: r.headers()["content-type"] ?? null,
+          status: r.status(),
+          body: JSON.stringify(json).slice(0, 50_000),
+        });
+      }
     } catch {
       // ignore
     }
   });
 
-  const home = await page.goto("https://www.citilink.ru/", { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(6000);
-
-  // Пытаемся получить ссылку на товар через поисковую выдачу.
-  // Примечание: URL/DOM у Citilink может меняться; PoC специально делает минимум допущений.
-  const searchUrl = "https://www.citilink.ru/search/?text=%D0%BF%D1%80%D0%BE%D1%86%D0%B5%D1%81%D1%81%D0%BE%D1%80";
-  const search = await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(6000);
-
-  const productHref = await page.evaluate(() => {
-    const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"));
-    const hrefs = anchors
-      .map((a) => a.getAttribute("href") || "")
-      .filter(Boolean)
-      .filter((h) => /\/product\//i.test(h))
-      .map((h) => new URL(h, location.href).toString());
-
-    const uniq: string[] = [];
-    for (const h of hrefs) if (!uniq.includes(h)) uniq.push(h);
-    const slice = uniq.slice(0, 20);
-    if (slice.length === 0) return null;
-    return slice[Math.floor(Math.random() * slice.length)];
+  page.on("requestfinished", async (req) => {
+    const u = req.url();
+    if (!u.includes("rpc.citilink.ru/catalog-site")) return;
+    try {
+      const postData = req.postData();
+      if (postData && capturedRpc.length < 3) {
+        capturedRpc.push({
+          url: u,
+          method: req.method(),
+          contentType: req.headers()["content-type"] ?? null,
+          status: 0,
+          body: postData.slice(0, 50_000),
+        });
+      }
+    } catch {
+      // ignore
+    }
   });
+
+  let home: any = null;
+  let search: any = null;
+  const provided = process.env.CITILINK_URL || process.argv.slice(2).find((a) => a.startsWith("http")) || null;
+
+  if (!provided) {
+    home = await page.goto("https://www.citilink.ru/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(6000);
+  }
+
+
+  let productHref: string | null = null;
+
+  if (provided) {
+    productHref = provided;
+  } else {
+    // Пытаемся получить ссылку на товар через поисковую выдачу.
+    // Примечание: URL/DOM у Citilink может меняться; PoC специально делает минимум допущений.
+    const searchUrl = "https://www.citilink.ru/search/?text=%D0%BF%D1%80%D0%BE%D1%86%D0%B5%D1%81%D1%81%D0%BE%D1%81%D1%81%D0%BE%D1%80";
+    search = await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(6000);
+
+    productHref = await page.evaluate(() => {
+      const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href]"));
+      const hrefs = anchors
+        .map((a) => a.getAttribute("href") || "")
+        .filter(Boolean)
+        .filter((h) => /\/product\//i.test(h))
+        .map((h) => new URL(h, location.href).toString());
+
+      const uniq: string[] = [];
+      for (const h of hrefs) if (!uniq.includes(h)) uniq.push(h);
+      const slice = uniq.slice(0, 20);
+      if (slice.length === 0) return null;
+      return slice[Math.floor(Math.random() * slice.length)];
+    });
+  }
 
   if (!productHref) {
     const html = await page.content();
@@ -189,8 +253,54 @@ async function main() {
 
   const productNav = await page.goto(characteristicsHref, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(6000);
-  await page.mouse.wheel(0, 2500);
-  await page.waitForTimeout(9000);
+  await page.mouse.wheel(0, 1500);
+  await page.waitForTimeout(4000);
+  await page.mouse.wheel(0, 3000);
+  await page.waitForTimeout(8000);
+
+  // Scrape specs from DOM as a robust source
+  const domSpecs: SpecItem[] = await page.evaluate(() => {
+    const results: { group: string | null; name: string; value: string }[] = [];
+
+    // Select all property groups
+    // Based on inspection, groups are often in StyledPropertyGroupWrapper or similar
+    const groupNodes = Array.from(document.querySelectorAll('li[class*="StyledPropertyGroupWrapper"], div[class*="StyledPropertyGroupWrapper"]'));
+
+    for (const groupNode of groupNodes) {
+      const groupTitle = groupNode.querySelector('h4, div[class*="StyledHeading"]')?.textContent?.trim() || null;
+      const rowNodes = groupNode.querySelectorAll('div[class*="PropertiesItem"], div[class*="es7ht5z1"]');
+
+      for (const rowNode of rowNodes) {
+        const nameNode = rowNode.querySelector('[class*="PropertiesName"], [class*="es7ht5z3"]');
+        const valueNode = rowNode.querySelector('[class*="PropertiesValue"], [class*="es7ht5z6"]');
+
+        const name = nameNode?.textContent?.trim() || "";
+        const value = valueNode?.textContent?.trim() || "";
+
+        if (name && value) {
+          results.push({ group: groupTitle, name, value });
+        }
+      }
+    }
+
+    // If still empty, try a more generic approach
+    if (results.length === 0) {
+      const allRows = Array.from(document.querySelectorAll('div[class*="PropertiesItem"], div[class*="es7ht5z1"]'));
+      for (const row of allRows) {
+        // Find text content that looks like name:value
+        const nameNode = row.querySelector('div:first-child, span:first-child');
+        const valueNode = row.querySelector('div:last-child, span:last-child');
+        const name = nameNode?.textContent?.trim() || "";
+        const value = valueNode?.textContent?.trim() || "";
+        if (name && value && name !== value) {
+          results.push({ group: null, name, value });
+        }
+      }
+    }
+
+    return results;
+  });
+
 
   const jsonlds = await page.$$eval('script[type="application/ld+json"]', (nodes) =>
     nodes.map((n) => (n.textContent || "").trim()).filter(Boolean),
@@ -284,13 +394,13 @@ async function main() {
     const rating =
       p.aggregateRating && typeof p.aggregateRating === "object"
         ? {
-            value: Number.isFinite(Number((p.aggregateRating as any).ratingValue))
-              ? Number((p.aggregateRating as any).ratingValue)
-              : null,
-            count: Number.isFinite(Number((p.aggregateRating as any).reviewCount))
-              ? Number((p.aggregateRating as any).reviewCount)
-              : null,
-          }
+          value: Number.isFinite(Number((p.aggregateRating as any).ratingValue))
+            ? Number((p.aggregateRating as any).ratingValue)
+            : null,
+          count: Number.isFinite(Number((p.aggregateRating as any).reviewCount))
+            ? Number((p.aggregateRating as any).reviewCount)
+            : null,
+        }
         : { value: null, count: null };
 
     return {
@@ -322,9 +432,17 @@ async function main() {
 
     const extraPayload = initialState?.productPage?.properties?.payload ?? null;
     if (extraPayload) {
-      if (Array.isArray((extraPayload as any).properties)) addPairs((extraPayload as any).properties, null);
-      if (Array.isArray((extraPayload as any).items)) addPairs((extraPayload as any).items, null);
+      if (Array.isArray((extraPayload as any).properties)) {
+        // Recursively add through walk logic to handle nested groups
+        const extraSpecs = extractNameValueSpecsFromUnknownJson(extraPayload);
+        out.push(...extraSpecs);
+      } else if (Array.isArray((extraPayload as any).items)) {
+        addPairs((extraPayload as any).items, null);
+      }
     }
+
+    // Add DOM scraped specs - they are often the most complete
+    out.push(...domSpecs);
 
     // Dedup
     const seen = new Set<string>();
@@ -336,6 +454,7 @@ async function main() {
     });
   })();
 
+
   // Если удалось вытащить больше характеристик из сетевого JSON, используем его.
   const finalSpecs = capturedApiSpecs.length > specs.length ? capturedApiSpecs : specs;
 
@@ -345,15 +464,17 @@ async function main() {
     url: characteristicsHref,
     debug: {
       homeStatus: home?.status() ?? null,
-      searchStatus: search?.status() ?? null,
+      searchStatus: search?.status?.() ?? null,
       productNavStatus: productNav?.status() ?? null,
       jsonldCount: jsonlds.length,
+      capturedRpcUrls: Array.from(capturedRpcUrls).slice(0, 20),
     },
     product,
     specs: finalSpecs,
     raw: {
       jsonld: productJsonLd,
       nextData: nextData ? { hasNextData: true } : { hasNextData: false },
+      rpcSamples: capturedRpc,
       htmlSnippet: html.slice(0, 50_000),
     },
   };
