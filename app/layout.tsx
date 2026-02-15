@@ -1,3 +1,5 @@
+import { ThemeProvider } from '@/components/theme-provider';
+import { Toaster } from '@/components/ui/sonner';
 import type { Metadata } from 'next';
 import './globals.css';
 
@@ -20,7 +22,10 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen antialiased" suppressHydrationWarning>
-        {children}
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

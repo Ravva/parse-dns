@@ -33,3 +33,12 @@ export type ParseRun = {
   started_at: string;
   completed_at: string | null;
 };
+
+export type ParsingSchedule = {
+  id: string;
+  source: 'dns-shop' | 'citilink' | 'all';
+  interval_minutes: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  is_enabled: boolean;
+};

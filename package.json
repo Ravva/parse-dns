@@ -12,10 +12,12 @@
     "parse": "tsx lib/parsers/parse.ts",
     "poc:dns": "tsx scripts/poc_dns_real_json.ts",
     "poc:citilink": "tsx scripts/poc_citilink_real_json.ts",
+    "schedule": "tsx scripts/scheduler.ts",
     "debug:dns": "tsx scripts/dns_session_debug.ts",
     "setup:playwright": "playwright install chromium"
   },
   "dependencies": {
+    "@radix-ui/react-switch": "^1.2.6",
     "@supabase/supabase-js": "^2",
     "axios": "^1.13.5",
     "cheerio": "^1.2.0",
@@ -23,16 +25,18 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
+    "next-themes": "^0.4.6",
     "playwright": "^1.58.2",
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^25.2.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
